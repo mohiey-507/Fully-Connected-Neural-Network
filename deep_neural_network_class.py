@@ -187,7 +187,8 @@ class Deep_Neural_Network:
             self.parameters, self.v, self.s = adam(self.parameters, grads, self.num_layers, self.v, self.s, self.t, current_learning_rate, beta1=beta1, beta2=beta2, epsilon=epsilon)
 
     def fit(self, X, Y, learning_rate=0.001, epoch=1000, batch_size=64, verbose=False, validation_split=0.2,
-            shuffle=True, lambda_reg=0.01, decay_rate=0.95, beta1=0.9, beta2=0.999, epsilon=1e-8):
+            shuffle=True, lambda_reg=0.01, decay_rate=0.95, beta1=0.9, beta2=0.999, epsilon=1e-8,
+            early_stopping_patience=50):
         """
         Trains the neural network on the given dataset.
         """
@@ -203,6 +204,9 @@ class Deep_Neural_Network:
         val_costs = []
         num_batches = int(np.ceil(m / batch_size))
 
+        best_val_cost = float('inf')
+        patience_counter = 0
+
         for i in range(epoch):
             for j in range(num_batches):
                 start = j * batch_size
@@ -213,7 +217,7 @@ class Deep_Neural_Network:
                 AL, caches = self.forward(X_batch)
                 grads = self.backward(AL, Y_batch, caches, epsilon, lambda_reg)
 
-                current_learning_rate = learning_rate * (decay_rate ** (i // 100))
+                current_learning_rate = learning_rate * (decay_rate ** i)
                 self.update_parameters(grads, current_learning_rate, beta1, beta2, epsilon)
 
             train_AL, _ = self.forward(X_train)
@@ -227,13 +231,31 @@ class Deep_Neural_Network:
             if verbose and (i % 100 == 0 or i == epoch - 1):
                 print(f"Epoch {i+1}/{epoch} --> Train cost: {train_cost:.8f}, Validation cost: {val_cost:.8f}")
 
-            if i > 0 and abs(costs[-1] - costs[-2]) < 1e-8:
-                print("Early stopping due to negligible improvement")
+            if self.early_stopping(val_cost, best_val_cost, patience_counter, early_stopping_patience):
+                print(f"Early stopping triggered at epoch {i+1}")
                 break
+
+            if val_cost < best_val_cost:
+                best_val_cost = val_cost
+                patience_counter = 0
+            else:
+                patience_counter += 1
 
         self.evaluate(X_train, Y_train, "Training", reshape=False)
         self.evaluate(X_val, Y_val, "Validation", reshape=False)
         return costs, val_costs
+
+    def early_stopping(self, val_cost, best_val_cost, counter, patience):
+        """
+        Determines if early stopping should be triggered.
+        """
+        if val_cost < best_val_cost:
+            return False
+        else:
+            if counter >= patience:
+                return True
+            else:
+                return False
 
     def evaluate(self, X, Y, dataset_name="", reshape=True, batch_size=64, compute_cost=False):
         """
@@ -259,37 +281,29 @@ class Deep_Neural_Network:
             if compute_cost:
                 total_cost += self.compute_cost(AL, Y_batch) * (end - start)
             
-            if self.output_activation == 'sigmoid':
-                pred = (AL > 0.5).astype(int)
-            elif self.output_activation == 'softmax':
-                pred = np.argmax(AL, axis=0)
-            else:
-                pred = AL
-            
-            all_predictions.extend(pred.flatten())
+            all_predictions.extend(AL.flatten())
         
         all_predictions = np.array(all_predictions)
         Y = Y.flatten()
         
-        if self.output_activation in ['sigmoid', 'softmax']:
-            accuracy = np.mean(all_predictions == Y)
-            if dataset_name:
-                print(f"{dataset_name} Accuracy: {accuracy:.2%}")
-        else:
-            mse = np.mean((all_predictions - Y) ** 2)
-            if dataset_name:
-                print(f"{dataset_name} MSE: {mse:.4f}")
+        mse = np.mean((all_predictions - Y) ** 2)
+        r2 = 1 - (np.sum((Y - all_predictions) ** 2) / np.sum((Y - np.mean(Y)) ** 2))
+        print(f"{dataset_name} MSE: {mse:.4f}")
+        print(f"{dataset_name} R2: {r2:.4f}")
         
         if compute_cost:
             avg_cost = total_cost / m
-            return avg_cost
+            return avg_cost, mse, r2
         else:
-            return all_predictions
+            return all_predictions, mse, r2
 
-    def predict(self, X):
+    def predict(self, X, reshape=True):
         """
         Predicts the class labels for the input data `X` based on the trained model.
         """
+
+        if reshape:
+            X = X.T
         probas, _ = self.forward(X)
 
         if self.output_activation == 'sigmoid':
