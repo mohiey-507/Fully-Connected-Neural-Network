@@ -25,7 +25,7 @@ def classification_task():
     # Create and train the neural network    
     nn = Deep_Neural_Network([30, 8, 2, 1]) # number of features = 30, Two hidden layers with 8 and 2 neurons, output layer = 1
     nn.compile(optimizer='adam', activation='relu', loss='BinaryCrossentropy')
-    nn.fit(X_train, y_train, learning_rate=0.01, lambda_reg=0.05, decay_rate=0.5, batch_size=256, verbose=False)
+    nn.fit(X_train, y_train, learning_rate=0.01, lambda_reg=0.05, decay_rate=0.99, batch_size=128)
     nn.evaluate(X_test, y_test, 'Testset')
 
     print('-'*60)
@@ -69,29 +69,18 @@ def regression_task():
     r2 = r2_score(y_test, y_pred)
     print(f"MSE: {mse:.2f}, R2: {r2:.2f}")
 
-    # print sample predictions and actual values
-    print(f"Predictions: {y_pred[:5]}")
-    print(f"Actual values: {y_test[:5]}")
-
     print('-'*60)
 
     # Create and train the neural network    
-    nnr = Deep_Neural_Network([2, 32, 8, 1]) 
+    nnr = Deep_Neural_Network([2, 16, 4, 1]) 
     nnr.compile(optimizer='adam', activation='relu', loss='MSE')
-    nnr.fit(X_train, y_train, epoch=1800, learning_rate=0.002, decay_rate=0.9999, batch_size=128)
+    nnr.fit(X_train, y_train, learning_rate=0.01, decay_rate=0.98, batch_size=256, verbose=True)
     y_pred = nnr.predict(X_test).ravel()
-
-    nnr.evaluate(X_test, y_test, 'Testset')
     mse = mean_squared_error(y_test, y_pred)
     r2 = r2_score(y_test, y_pred) 
     print(f"MSE: {mse:.2f}, R2: {r2:.2f}")
 
-    # print sample predictions and actual values
-    print(f"Predictions: {y_pred[:5]}")
-    print(f"Actual values: {y_test[:5]}")
-
-classification_task()
-
-print('-'*80)
-
-regression_task()
+if __name__ == '__main__':
+    classification_task()
+    print('-'*80)
+    regression_task()

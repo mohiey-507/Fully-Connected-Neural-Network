@@ -217,7 +217,7 @@ class Deep_Neural_Network:
                 AL, caches = self.forward(X_batch)
                 grads = self.backward(AL, Y_batch, caches, epsilon, lambda_reg)
 
-                current_learning_rate = learning_rate * (decay_rate ** i)
+                current_learning_rate = learning_rate * (decay_rate ** (i // 100))
                 self.update_parameters(grads, current_learning_rate, beta1, beta2, epsilon)
 
             train_AL, _ = self.forward(X_train)
@@ -257,7 +257,8 @@ class Deep_Neural_Network:
             else:
                 return False
 
-    def evaluate(self, X, Y, dataset_name="", reshape=True, batch_size=64, compute_cost=False):
+    def evaluate(self, X: np.ndarray, Y: np.ndarray, dataset_name: str = "", reshape: bool = True,
+                batch_size: int = 64, compute_cost: bool = False):
         """
         Evaluates the model's performance on a given dataset.
         """
@@ -273,29 +274,32 @@ class Deep_Neural_Network:
         for j in range(num_batches):
             start = j * batch_size
             end = min((j + 1) * batch_size, m)
-            X_batch = X[:, start:end]
-            Y_batch = Y[:, start:end]
+            X_batch, Y_batch = X[:, start:end], Y[:, start:end]
             
             AL, _ = self.forward(X_batch)
-            
+            all_predictions.extend(self.predict_classes(AL).flatten())
+
             if compute_cost:
                 total_cost += self.compute_cost(AL, Y_batch) * (end - start)
             
-            all_predictions.extend(AL.flatten())
-        
-        all_predictions = np.array(all_predictions)
-        Y = Y.flatten()
-        
-        mse = np.mean((all_predictions - Y) ** 2)
-        r2 = 1 - (np.sum((Y - all_predictions) ** 2) / np.sum((Y - np.mean(Y)) ** 2))
-        print(f"{dataset_name} MSE: {mse:.4f}")
-        print(f"{dataset_name} R2: {r2:.4f}")
-        
+        return self._finalize_evaluation(np.array(all_predictions), Y.flatten(), total_cost, m, compute_cost, dataset_name)
+
+    def _finalize_evaluation(self, all_predictions: np.ndarray, Y: np.ndarray, total_cost: float, m: int, 
+                            compute_cost: bool, dataset_name: str):
+
+        if self.output_activation in ['sigmoid', 'softmax']:
+            accuracy = np.mean(all_predictions == Y)
+            print(f"{dataset_name} Accuracy: {accuracy:.2%}")
+        else:
+            mse = np.mean((all_predictions - Y) ** 2)
+            r2 = 1 - (np.sum((Y - all_predictions) ** 2) / np.sum((Y - np.mean(Y)) ** 2))
+            print(f"{dataset_name} MSE: {mse:.4f}, R2: {r2:.4f}")
+
         if compute_cost:
             avg_cost = total_cost / m
-            return avg_cost, mse, r2
+            return avg_cost, (accuracy,) if self.output_activation in ['sigmoid', 'softmax'] else (mse, r2)
         else:
-            return all_predictions, mse, r2
+            return all_predictions, (accuracy,) if self.output_activation in ['sigmoid', 'softmax'] else (mse, r2)
 
     def predict(self, X, reshape=True):
         """
@@ -305,10 +309,16 @@ class Deep_Neural_Network:
         if reshape:
             X = X.T
         probas, _ = self.forward(X)
+        return self.predict_classes(probas)
 
+    def predict_classes(self, probas: np.ndarray) -> np.ndarray:
+        """
+        Predicts class labels based on the output probabilities and the model's output activation.
+        """
         if self.output_activation == 'sigmoid':
             return (probas > 0.5).astype(int)
         elif self.output_activation == 'softmax':
             return np.argmax(probas, axis=0)
         else:
             return probas  # For regression tasks
+
