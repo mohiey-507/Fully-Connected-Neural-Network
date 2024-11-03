@@ -1,2 +1,3 @@
-# Deep-Neural-Network
-Building a Deep Neural Network from scratch
+# Fully-Connected Neural Network
+Building a Deep Fully-Connected(Dense) from scratch
+
